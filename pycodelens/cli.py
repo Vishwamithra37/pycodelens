@@ -7,7 +7,7 @@ import sys
 import os
 import argparse
 import json
-from .analyzer import analyze_file, extract_code_elements
+from .analyzer import analyze_file, extract_code_elements, get_source_by_name, get_source_by_lines
 
 def print_functions(functions, verbose=False):
     """Print function information."""
@@ -44,12 +44,23 @@ def print_prints(print_calls):
     for p in print_calls:
         print(f"  Line {p['line']}: print with {p['args']} arguments")
 
+def print_source_code(source_code, element_name=None, element_type=None):
+    """Print source code with optional header."""
+    if element_name and element_type:
+        print(f"\nSOURCE CODE FOR {element_type.upper()} '{element_name}':")
+    elif element_name:
+        print(f"\nSOURCE CODE FOR '{element_name}':")
+    else:
+        print("\nSOURCE CODE:")
+    
+    print(f"{source_code}")
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='PyCodeLens: Extract and analyze code elements from Python files'
+        description='PyCodeLens: Extract and analyze code elements from various programming files'
     )
-    parser.add_argument('file', help='Path to the Python file')
+    parser.add_argument('file', help='Path to the file')
     parser.add_argument('--functions', '-f', action='store_true', help='List functions')
     parser.add_argument('--decorators', '-d', action='store_true', help='List decorators')
     parser.add_argument('--classes', '-c', action='store_true', help='List classes')
@@ -58,6 +69,11 @@ def main():
     parser.add_argument('--all', '-a', action='store_true', help='Show all information')
     parser.add_argument('--json', '-j', action='store_true', help='Output in JSON format')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed information')
+    
+    # New arguments for source code retrieval
+    parser.add_argument('--function-name', type=str, help='Print source code of a function by name')
+    parser.add_argument('--class-name', type=str, help='Print source code of a class by name')
+    parser.add_argument('--lines', type=str, help='Print lines from the file (format: start-end)')
     
     args = parser.parse_args()
     
@@ -70,15 +86,44 @@ def main():
         results = analysis['raw_results']
         summary = analysis['summary']
         
+        # Source code retrieval
+        if args.function_name:
+            source = get_source_by_name(results, args.function_name, 'function')
+            if source:
+                print_source_code(source, args.function_name, 'function')
+            else:
+                print(f"Function '{args.function_name}' not found.")
+            return 0
+            
+        if args.class_name:
+            source = get_source_by_name(results, args.class_name, 'class')
+            if source:
+                print_source_code(source, args.class_name, 'class')
+            else:
+                print(f"Class '{args.class_name}' not found.")
+            return 0
+            
+        if args.lines:
+            try:
+                start, end = map(int, args.lines.split('-'))
+                source = get_source_by_lines(results, start, end)
+                if source:
+                    print_source_code(source, f"lines {start}-{end}")
+                else:
+                    print(f"Invalid line range: {args.lines}")
+            except ValueError:
+                print(f"Invalid line range format. Use 'start-end', e.g., '10-20'.")
+            return 0
+            
         # JSON output
         if args.json:
             if args.counts:
                 print(json.dumps({
                     'file': args.file,
                     'functions': len(results['functions']),
-                    'decorators': len(results['decorators']),
+                    'decorators': len(results.get('decorators', [])),
                     'classes': len(results['classes']),
-                    'print_statements': len(results['print_calls'])
+                    'print_statements': len(results.get('print_calls', []))
                 }, indent=2))
             else:
                 print(json.dumps(analysis, indent=2))
@@ -92,22 +137,22 @@ def main():
         if args.counts:
             print(f"File: {args.file}")
             print(f"  Functions: {len(results['functions'])}")
-            print(f"  Decorators: {len(results['decorators'])}")
+            print(f"  Decorators: {len(results.get('decorators', []))}")
             print(f"  Classes: {len(results['classes'])}")
-            print(f"  Print statements: {len(results['print_calls'])}")
+            print(f"  Print statements: {len(results.get('print_calls', []))}")
         
         # Show detailed information
         if args.functions or args.all:
             print_functions(results['functions'], args.verbose)
         
         if args.decorators or args.all:
-            print_decorators(results['decorators'])
+            print_decorators(results.get('decorators', []))
         
         if args.classes or args.all:
             print_classes(results['classes'], args.verbose)
         
         if args.prints or args.all:
-            print_prints(results['print_calls'])
+            print_prints(results.get('print_calls', []))
             
     except Exception as e:
         print(f"Error analyzing file: {e}", file=sys.stderr)
