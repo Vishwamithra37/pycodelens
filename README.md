@@ -1,6 +1,7 @@
+```markdown
 # PyCodeLens
 
-A Python code analysis tool to extract code elements like functions, decorators, classes, and print statements.
+A Python code analysis tool to extract and manipulate code elements like functions, decorators, classes, and print statements. It supports Python, JavaScript, and TypeScript files.
 
 ## Installation
 
@@ -34,6 +35,12 @@ PyCodeLens allows you to extract and analyze:
    - Line numbers
    - Number of arguments
 
+5. **Code Replacement**
+   - Replace a function with new code
+   - Replace a class with new code
+   - Replace specific lines with new code
+   - Automatic indentation handling
+
 ## Usage
 
 ### Command Line
@@ -59,12 +66,34 @@ pycodelens path/to/your_file.py --json
 
 # Show verbose information
 pycodelens path/to/your_file.py --all --verbose
+
+# Print source code for a specific function
+pycodelens path/to/your_file.py --function-name my_function
+
+# Print source code for a specific class
+pycodelens path/to/your_file.py --class-name MyClass
+
+# Print specific lines from the file
+pycodelens path/to/your_file.py --lines 10-20
+```
+
+### Code Replacement
+
+```bash
+# Replace a function with code from a file
+pycodelens path/to/your_file.py --replace-function my_function --replacement-file new_function.py
+
+# Replace a class with inline content
+pycodelens path/to/your_file.py --replace-class MyClass --replacement-content "class MyClass:\n    def new_method(self):\n        pass"
+
+# Replace specific lines
+pycodelens path/to/your_file.py --replace-lines 10-20 --replacement-file new_code.py
 ```
 
 ### Python API
 
 ```python
-from pycodelens import analyze_file
+from pycodelens import analyze_file, replace_element
 
 # Analyze a file
 analysis = analyze_file('path/to/your_file.py')
@@ -80,6 +109,15 @@ for func in raw_results['functions']:
     print(f"Function {func['name']} on lines {func['line_start']}-{func['line_end']}")
     if func['decorators']:
         print(f"  Has decorators: {', '.join('@' + d['name'] for d in func['decorators'])}")
+
+# Replace a function
+success, message = replace_element(
+    'path/to/your_file.py',
+    'function',
+    'my_function',
+    replacement_file='new_function.py'
+)
+print(message)
 ```
 
 ## Example Output
@@ -106,6 +144,12 @@ DECORATORS:
   ...
 ```
 
+## Supported Languages
+
+- **Python** - Full support with detailed analysis
+- **JavaScript** - Basic support for functions and classes
+- **TypeScript** - Basic support with interface detection
+
 ## Requirements
 
 - Python 3.7+
@@ -114,3 +158,4 @@ DECORATORS:
 ## License
 
 MIT
+```

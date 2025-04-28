@@ -7,7 +7,7 @@ import sys
 import os
 import argparse
 import json
-from .analyzer import analyze_file, extract_code_elements, get_source_by_name, get_source_by_lines
+from .analyzer import analyze_file, extract_code_elements, get_source_by_name, get_source_by_lines, replace_element
 
 def print_functions(functions, verbose=False):
     """Print function information."""
@@ -70,10 +70,18 @@ def main():
     parser.add_argument('--json', '-j', action='store_true', help='Output in JSON format')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed information')
     
-    # New arguments for source code retrieval
+    # Code retrieval arguments
     parser.add_argument('--function-name', type=str, help='Print source code of a function by name')
     parser.add_argument('--class-name', type=str, help='Print source code of a class by name')
     parser.add_argument('--lines', type=str, help='Print lines from the file (format: start-end)')
+    
+    # Code replacement arguments
+    replacement_group = parser.add_argument_group('Code Replacement Options')
+    replacement_group.add_argument('--replace-function', type=str, help='Name of the function to replace')
+    replacement_group.add_argument('--replace-class', type=str, help='Name of the class to replace')
+    replacement_group.add_argument('--replace-lines', type=str, help='Line range to replace (format: start-end)')
+    replacement_group.add_argument('--replacement-file', type=str, help='File containing the replacement code')
+    replacement_group.add_argument('--replacement-content', type=str, help='Directly specified replacement code')
     
     args = parser.parse_args()
     
@@ -81,13 +89,42 @@ def main():
         if not os.path.exists(args.file):
             print(f"Error: File '{args.file}' not found.", file=sys.stderr)
             return 1
-            
-        analysis = analyze_file(args.file)
-        results = analysis['raw_results']
-        summary = analysis['summary']
         
+        # Handle code replacement
+        if args.replace_function or args.replace_class or args.replace_lines:
+            if not (args.replacement_file or args.replacement_content):
+                print("Error: Must specify either --replacement-file or --replacement-content", file=sys.stderr)
+                return 1
+                
+            if args.replace_function:
+                element_type = 'function'
+                element_name = args.replace_function
+            elif args.replace_class:
+                element_type = 'class'
+                element_name = args.replace_class
+            else:  # args.replace_lines
+                element_type = 'lines'
+                element_name = args.replace_lines
+                
+            success, message = replace_element(
+                args.file,
+                element_type,
+                element_name,
+                args.replacement_file,
+                args.replacement_content
+            )
+            
+            if success:
+                print(message)
+                return 0
+            else:
+                print(f"Error: {message}", file=sys.stderr)
+                return 1
+                
         # Source code retrieval
         if args.function_name:
+            analysis = analyze_file(args.file)
+            results = analysis['raw_results']
             source = get_source_by_name(results, args.function_name, 'function')
             if source:
                 print_source_code(source, args.function_name, 'function')
@@ -96,6 +133,8 @@ def main():
             return 0
             
         if args.class_name:
+            analysis = analyze_file(args.file)
+            results = analysis['raw_results']
             source = get_source_by_name(results, args.class_name, 'class')
             if source:
                 print_source_code(source, args.class_name, 'class')
@@ -105,6 +144,8 @@ def main():
             
         if args.lines:
             try:
+                analysis = analyze_file(args.file)
+                results = analysis['raw_results']
                 start, end = map(int, args.lines.split('-'))
                 source = get_source_by_lines(results, start, end)
                 if source:
@@ -114,6 +155,11 @@ def main():
             except ValueError:
                 print(f"Invalid line range format. Use 'start-end', e.g., '10-20'.")
             return 0
+            
+        # Analyze the file
+        analysis = analyze_file(args.file)
+        results = analysis['raw_results']
+        summary = analysis['summary']
             
         # JSON output
         if args.json:

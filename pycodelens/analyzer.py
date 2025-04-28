@@ -406,3 +406,142 @@ class TypeScriptParser(BaseCodeParser):
             'decorators': [],
             'print_calls': [],
         }
+
+def replace_element(target_file, element_type, element_name, replacement_file=None, replacement_content=None):
+    """
+    Replace a code element (function, class) or line range in the target file.
+    
+    Args:
+        target_file: Path to the file where replacement will occur
+        element_type: Type of element to replace ('function', 'class', or 'lines')
+        element_name: Name of the element, or line range as 'start-end'
+        replacement_file: Path to the file containing replacement content (optional)
+        replacement_content: Direct replacement content as string (optional)
+        
+    Returns:
+        Tuple of (success, message)
+    """
+    if not replacement_file and not replacement_content:
+        return False, "Either replacement_file or replacement_content must be provided"
+    
+    try:
+        # Read target file
+        with open(target_file, 'r', encoding='utf-8') as f:
+            target_lines = f.readlines()
+        
+        # Read replacement content
+        if replacement_file:
+            with open(replacement_file, 'r', encoding='utf-8') as f:
+                replacement_content = f.read()
+        
+        # Get element to replace
+        start_line = None
+        end_line = None
+        
+        if element_type == 'lines':
+            try:
+                parts = element_name.split('-')
+                start_line = int(parts[0])
+                end_line = int(parts[1]) if len(parts) > 1 else start_line
+            except ValueError:
+                return False, f"Invalid line range format: {element_name}. Use 'start-end'."
+        else:
+            # Analyze the file to find the element
+            results = analyze_file(target_file)['raw_results']
+            
+            if element_type == 'function':
+                element_list = results['functions']
+                # Also check class methods
+                if not any(f['name'] == element_name for f in element_list):
+                    for cls in results['classes']:
+                        for method in cls.get('methods', []):
+                            if method['name'] == element_name:
+                                start_line = method['line_start']
+                                end_line = method['line_end']
+                                break
+                        if start_line:
+                            break
+            elif element_type == 'class':
+                element_list = results['classes']
+            else:
+                return False, f"Unsupported element type: {element_type}"
+                
+            # If we haven't found a method, look for the main element
+            if not start_line:
+                for element in element_list:
+                    if element['name'] == element_name:
+                        start_line = element['line_start']
+                        end_line = element['line_end']
+                        break
+                        
+            if not start_line:
+                return False, f"{element_type.capitalize()} '{element_name}' not found in {target_file}"
+        
+        # Calculate indentation of the first line
+        original_indent = ""
+        if start_line and start_line <= len(target_lines):
+            line = target_lines[start_line - 1]
+            original_indent = line[:len(line) - len(line.lstrip())]
+        
+        # Process the replacement content to match indentation
+        replacement_lines = replacement_content.splitlines()
+        if replacement_lines:
+            # Identify the base indentation of the replacement content
+            # by finding the non-empty line with the least indentation
+            replace_indent = None
+            for line in replacement_lines:
+                if line.strip():  # Skip empty lines
+                    current_indent = len(line) - len(line.lstrip())
+                    if replace_indent is None or current_indent < replace_indent:
+                        replace_indent = current_indent
+            
+            # If no indent was found, default to 0
+            if replace_indent is None:
+                replace_indent = 0
+                
+            # Apply the target indentation to all lines
+            adjusted_lines = []
+            for line in replacement_lines:
+                if line.strip():  # If not an empty line
+                    # Remove the original indent and add the new one
+                    if len(line) > replace_indent:
+                        line_content = line[replace_indent:]
+                        adjusted_lines.append(f"{original_indent}{line_content}")
+                    else:
+                        adjusted_lines.append(f"{original_indent}{line.lstrip()}")
+                else:
+                    # For empty lines, just add the original indent if there was one
+                    if original_indent:
+                        adjusted_lines.append(original_indent)
+                    else:
+                        adjusted_lines.append("")
+                        
+            replacement_content = "\n".join(adjusted_lines)
+        
+        # Perform the replacement
+        new_content = []
+        i = 0
+        while i < len(target_lines):
+            line_num = i + 1
+            if line_num < start_line or line_num > end_line:
+                new_content.append(target_lines[i])
+                i += 1
+            elif line_num == start_line:
+                # Add the replacement content
+                new_content.append(replacement_content)
+                if not replacement_content.endswith('\n'):
+                    new_content.append('\n')
+                # Skip all lines of the original element
+                i = end_line
+            else:
+                i += 1
+        
+        # Write the modified content back to the file
+        with open(target_file, 'w', encoding='utf-8') as f:
+            for line in new_content:
+                f.write(line if isinstance(line, str) else '')
+        
+        return True, f"Successfully replaced {element_type} '{element_name}' in {target_file}"
+        
+    except Exception as e:
+        return False, f"Error replacing {element_type}: {str(e)}"
