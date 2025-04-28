@@ -1,4 +1,4 @@
-```markdown
+
 # PyCodeLens
 
 A Python code analysis tool to extract and manipulate code elements like functions, decorators, classes, and print statements. It supports Python, JavaScript, and TypeScript files.
@@ -158,4 +158,3 @@ DECORATORS:
 ## License
 
 MIT
-```
